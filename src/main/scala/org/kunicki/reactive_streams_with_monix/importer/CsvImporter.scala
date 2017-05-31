@@ -4,7 +4,7 @@ import java.io.{BufferedReader, File, FileInputStream, InputStreamReader}
 import java.nio.file.Paths
 import java.util.zip.GZIPInputStream
 
-import com.typesafe.config.Config
+import com.typesafe.config.{Config, ConfigFactory}
 import com.typesafe.scalalogging.LazyLogging
 import monix.eval.Task
 import monix.execution.CancelableFuture
@@ -85,4 +85,12 @@ object CsvImporter {
       val gathered = Task.gather(tasks)
       Observable.fromTask(gathered).concatMap(Observable.fromIterable)
     }
+
+  def main(args: Array[String]): Unit = {
+    val config = ConfigFactory.load()
+    val readingRepository = new ReadingRepository
+
+    new CsvImporter(config, readingRepository).importFromFiles
+      .onComplete(_ => readingRepository.shutdown())
+  }
 }
