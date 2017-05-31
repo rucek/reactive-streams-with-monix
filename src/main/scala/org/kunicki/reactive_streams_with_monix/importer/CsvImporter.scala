@@ -7,7 +7,7 @@ import java.util.zip.GZIPInputStream
 import com.typesafe.config.Config
 import com.typesafe.scalalogging.LazyLogging
 import monix.eval.Task
-import monix.reactive.Observable
+import monix.reactive.{Consumer, Observable}
 import monix.reactive.observables.ObservableLike.Transformer
 import org.kunicki.reactive_streams_with_monix.importer.CsvImporter.mapAsyncOrdered
 import org.kunicki.reactive_streams_with_monix.model.{InvalidReading, Reading, ValidReading}
@@ -47,6 +47,9 @@ class CsvImporter(config: Config, readingRepository: ReadingRepository) extends 
       ValidReading(readings.head.id, average)
     }
   }
+
+  val storeReadings: Consumer[ValidReading, Unit] =
+    Consumer.foreachParallelAsync(concurrentWrites)(readingRepository.save)
 }
 
 object CsvImporter {
