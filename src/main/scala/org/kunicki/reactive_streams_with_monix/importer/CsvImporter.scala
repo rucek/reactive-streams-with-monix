@@ -39,6 +39,14 @@ class CsvImporter(config: Config, readingRepository: ReadingRepository) extends 
       .drop(linesToSkip)
       .transform(mapAsyncOrdered(nonIOParallelism)(parseLine))
   }
+
+  val computeAverage: Transformer[Reading, ValidReading] = _.bufferTumbling(2).mapAsync(nonIOParallelism) { readings =>
+    Task {
+      val validReadings = readings.collect { case r: ValidReading => r }
+      val average = if (validReadings.nonEmpty) validReadings.map(_.value).sum / validReadings.size else -1
+      ValidReading(readings.head.id, average)
+    }
+  }
 }
 
 object CsvImporter {
