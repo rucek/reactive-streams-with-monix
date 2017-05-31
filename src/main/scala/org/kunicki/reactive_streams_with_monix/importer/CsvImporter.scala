@@ -7,8 +7,10 @@ import java.util.zip.GZIPInputStream
 import com.typesafe.config.Config
 import com.typesafe.scalalogging.LazyLogging
 import monix.eval.Task
-import monix.reactive.{Consumer, Observable}
+import monix.execution.CancelableFuture
+import monix.execution.Scheduler.Implicits.global
 import monix.reactive.observables.ObservableLike.Transformer
+import monix.reactive.{Consumer, Observable}
 import org.kunicki.reactive_streams_with_monix.importer.CsvImporter.mapAsyncOrdered
 import org.kunicki.reactive_streams_with_monix.model.{InvalidReading, Reading, ValidReading}
 import org.kunicki.reactive_streams_with_monix.repository.ReadingRepository
@@ -52,6 +54,28 @@ class CsvImporter(config: Config, readingRepository: ReadingRepository) extends 
     Consumer.foreachParallelAsync(concurrentWrites)(readingRepository.save)
 
   val processSingleFile: Transformer[File, ValidReading] = _.transform(parseFile).transform(computeAverage)
+
+  def importFromFiles: CancelableFuture[Unit] = {
+    val files = importDirectory.listFiles()
+    logger.info(s"Starting import of ${files.size} files from ${importDirectory.getPath}")
+
+    val startTime = System.currentTimeMillis()
+
+    Observable
+      .fromIterable(files)
+      .bufferTumbling(concurrentFiles)
+      .flatMap { fs =>
+        Observable.merge(fs.map(f => Observable.now(f).transform(processSingleFile)): _*)
+      }
+      .consumeWith(storeReadings)
+      .doOnFinish { _ =>
+        val elapsedTime = (System.currentTimeMillis() - startTime) / 1000.0
+        logger.info(s"Import finished in ${elapsedTime}s")
+        Task.unit
+      }
+      .onErrorHandle(e => logger.error("Import failed", e))
+      .runAsync
+  }
 }
 
 object CsvImporter {
