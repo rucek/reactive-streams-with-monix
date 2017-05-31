@@ -50,6 +50,8 @@ class CsvImporter(config: Config, readingRepository: ReadingRepository) extends 
 
   val storeReadings: Consumer[ValidReading, Unit] =
     Consumer.foreachParallelAsync(concurrentWrites)(readingRepository.save)
+
+  val processSingleFile: Transformer[File, ValidReading] = _.transform(parseFile).transform(computeAverage)
 }
 
 object CsvImporter {
